@@ -10,9 +10,11 @@ namespace NOS.Engineering.Challenge.API.Controllers;
 public class ContentController : Controller
 {
     private readonly IContentsManager _manager;
-    public ContentController(IContentsManager manager)
+    private readonly ILogger<ContentController> _logger;
+    public ContentController(IContentsManager manager, ILogger<ContentController> logger)
     {
         _manager = manager;
+        _logger = logger;
     }
     
     [HttpGet]
@@ -68,20 +70,70 @@ public class ContentController : Controller
     }
     
     [HttpPost("{id}/genre")]
-    public Task<IActionResult> AddGenres(
+    public async Task<IActionResult> AddGenres(
         Guid id,
         [FromBody] IEnumerable<string> genre
     )
     {
-        return Task.FromResult<IActionResult>(StatusCode((int)HttpStatusCode.NotImplemented));
+        try
+        {
+            _logger.LogInformation("Adding genres for content with ID {Id}", id);
+
+            var content = await _manager.GetContent(id).ConfigureAwait(false);
+            if (content == null)
+            {
+                _logger.LogInformation("Content with ID {Id} not found", id);
+                return NotFound();
+            }
+
+            var existingGenres = content.GenreList.ToList();
+            existingGenres.AddRange(genre.Except(existingGenres));
+            content.GenreList = existingGenres.Distinct().ToList();
+
+            var updatedContent = await _manager.UpdateContent(id, content.ToDto()).ConfigureAwait(false);
+
+            _logger.LogInformation("Genres added successfully for content with ID {Id}", id);
+
+            return Ok(updatedContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred while adding genres for content with ID {Id}", id);
+            return Problem();
+        }        
     }
     
     [HttpDelete("{id}/genre")]
-    public Task<IActionResult> RemoveGenres(
+    public async Task<IActionResult> RemoveGenres(
         Guid id,
         [FromBody] IEnumerable<string> genre
     )
     {
-        return Task.FromResult<IActionResult>(StatusCode((int)HttpStatusCode.NotImplemented));
+        try
+        {
+            _logger.LogInformation("Removing genres for content with ID {Id}", id);
+
+            var content = await _manager.GetContent(id).ConfigureAwait(false);
+            if (content == null)
+            {
+                _logger.LogInformation("Content with ID {Id} not found", id);
+                return NotFound();
+            }
+
+            var existingGenres = content.GenreList.ToList();
+            existingGenres.RemoveAll(genre.Contains);
+            content.GenreList = existingGenres;
+
+            var updatedContent = await _manager.UpdateContent(id, content.ToDto()).ConfigureAwait(false);
+
+            _logger.LogInformation("Genres removed successfully for content with ID {Id}", id);
+
+            return Ok(updatedContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "An error occurred while removing genres for content with ID {Id}", id);
+            return Problem();
+        }        
     }
 }
